@@ -247,16 +247,12 @@ void main(){
     // *************************************
     // Trinlinear Mapping
     // *************************************
-    
-    // Turn the normal into the blending ratios. 
-    // It is important that x, y, z add up to just 1.0 and only 1.0 
-    vec3 blend = abs(normalize(worldNormal));
-    blend /= (blend.x + blend.y + blend.z); 
-
+     
     // We change the low res to hi res based on distance
     float lowMix = z / m_LowResDistance;
     lowMix = clamp(lowMix, 0.5, 1.0);
-    
+
+    // Collect the basic axis textures for x, y, and z 
     vec3 normalX;
     vec3 normalY;
     vec3 normalZ;
@@ -265,28 +261,68 @@ void main(){
     vec4 xColor = getColor(m_DiffuseMapX, m_DiffuseMapX, m_NormalMapX, texCoord.zy, lowMix, normalX);    
     vec4 yColor = getColor(m_DiffuseMapY, m_DiffuseMapY, m_NormalMapY, texCoord.xz, lowMix, normalY);    
     vec4 zColor = getColor(m_DiffuseMapZ, m_DiffuseMapZ, m_NormalMapZ, texCoord.xy, lowMix, normalZ);    
- 
-    vec4 topColor = getColor(m_DiffuseMap, m_DiffuseMapLow, m_NormalMapY, texCoord.xz, lowMix, normalTop);
+
+    // Turn the normal into the blending ratios.    
+    float up = worldNormal.y;
+    float offset = texture2D(m_Noise, texCoord.xz).x;
     
-    float top = step(worldNormal.y, 0.0); 
-    yColor = topColor * (1.0 - top) + yColor * top;   
+    // We bias the threshold a bit based on a noise value.
+    float threshold = up + (offset * 0.1 - 0.05);
+    
+    // Now bias the y blend factor by the threshold if it exceeds
+    // 45 degrees, basically.  The noise above will give us some
+    // nice rough edges.
+    vec3 blend = abs(normalize(worldNormal));
+    if( threshold > 0.707 ) {
+        blend.y += 10.0 * offset;         
+    }
+    
+    // "normalize" it once with the initial bias in place.
+    // blend should always add to 1.0
+    blend /= (blend.x + blend.y + blend.z); 
  
+    // The top will use a different texture based on the threshold so far    
+    vec4 topColor = getColor(m_DiffuseMap, m_DiffuseMapLow, m_NormalMapY, texCoord.xz, lowMix, normalTop);
+
+    // Mix a border into the topColor based on an area around the threshold
+    float edge1 = smoothstep(0.5, 0.72, threshold);
+    float edge2 = 1.0 - smoothstep(0.72, 0.75, threshold);
+    topColor = mix(topColor, topColor * vec4(0.6, 0.5, 0.5, 1.0), edge1 * edge2);
+  
+    // Top will be 1.0 if normal is up, 0 otherwise
+    float top = step(worldNormal.y, 0.0);
+    
+    // Select the top or the bottom texture based on sign of y
+    // ...and darken the bottom texture while we are at it   
+    yColor = topColor * (1.0 - top) + yColor * top * 0.5;   
+ 
+    // Bias the y blend value based on the up-ness and
+    // the edges  
+    blend.y *= max(top, edge1 * edge1);
+        
+    // It is important that x, y, z add up to just 1.0 and only 1.0 
+    blend /= (blend.x + blend.y + blend.z); 
+
+    // If we are very close to the grass edge then also darken the
+    // other two axes just a bit. 
+    float darken = min(1.0, 0.9 + (1.0 - edge1) * 0.1);
+       
+    vec4 diffuseColor = xColor * blend.x * darken 
+                        + yColor * blend.y
+                        + zColor * blend.z * darken;
+
+    // Move the normal map normals into their respective axis world space
+    // a bit arbitrarily.                        
     normalX = vec3(0.0, -normalX.y, normalX.x);
     normalY = vec3(normalY.x, 0.0, normalY.y);
-    normalZ = vec3(normalZ.x, -normalZ.y, 0.0);
-       
-    vec4 diffuseColor = xColor * blend.x 
-                        + yColor * blend.y
-                        + zColor * blend.z; 
+    normalZ = vec3(normalZ.x, -normalZ.y, 0.0);  
+ 
+    // Mix the normal map normals together based on blend                        
     vec3 bumpNormal = normalX * blend.x 
                         + normalY * blend.y
                         + normalZ * blend.z;
     vec3 normal = normalize(bumpNormal);                                                
  
-    //diffuseColor = vec4(0.5, 0.0, 0.0, 1.0);
-    //diffuseColor.xyz = normalize(worldTangent); //vec4(0.5, 0.0, 0.0, 1.0);
-    //normal = vec3(0.0, 0.0, 1.0);
-    //normal = vNormal; 
     normal = normalize(vNormal + g_NormalMatrix * bumpNormal); 
 
     // Moved this to after trilinear mapping is performed so that the color
