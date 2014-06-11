@@ -135,6 +135,13 @@ MaterialDef Grass Blades {
         
         // Grass parameters
         Float DistanceFalloff : 48
+        Texture2D Noise
+        Vector3 WorldOffset
+        
+        Boolean UseWind : true
+        Boolean UseDiscard : true
+        Boolean UseDarkening : true
+        Boolean UseTaper : true
     }
 
     Technique {
@@ -152,6 +159,7 @@ MaterialDef Grass Blades {
             ViewMatrix
             CameraPosition
             WorldMatrix
+            Time
         }
 
         Defines {
@@ -181,6 +189,11 @@ MaterialDef Grass Blades {
             SPHERE_MAP : SphereMap  
 
             NUM_BONES : NumberOfBones
+            
+            USE_WIND : UseWind
+            USE_DISCARD : UseDiscard
+            USE_DARKENING : UseDarkening
+            USE_TAPER : UseTaper
         }
     }
 

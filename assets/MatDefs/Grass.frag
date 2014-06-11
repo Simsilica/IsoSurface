@@ -184,15 +184,33 @@ void main(){
     float mid = m_DistanceFalloff * 0.75;
     float fade = min(1.0, (m_DistanceFalloff - vDistance) / mid);
     fade = fade * fade; // more gradual fading
-    alpha *= fade;
- 
-    // Mix some black in as the fade kicks in to avoid the gray borders   
-    diffuseColor = mix(vec4(0.2, 0.25, 0.05, fade), diffuseColor, alpha);
-    
-    if(alpha < m_AlphaDiscardThreshold){
-        discard;
-    }
 
+    #ifdef USE_DISCARD 
+        if( (alpha * fade) < m_AlphaDiscardThreshold ) {
+            discard;
+        }
+    #endif
+     
+    #ifdef USE_DARKENING
+        float darken = min(1.0, 2.0 * alpha);
+        
+        alpha *= fade;
+    
+        #ifdef USE_TAPER
+            // Far away... we want the 
+            // tapering to be less distinct
+            //float mid2 = m_DistanceFalloff * 0.5;
+            //float distFactor = min(1.0, ((m_DistanceFalloff - vDistance) / mid2);
+            float distFactor = vDistance / (m_DistanceFalloff * 0.25);           
+            darken *= min(1.0, texCoord.y * distFactor);
+        #endif
+        
+        float colorMix = min(0.7, alpha); 
+
+        // Mix some darker color in as the fade kicks in to avoid the gray borders   
+        //diffuseColor = mix(vec4(0.2, 0.25, 0.05, fade), diffuseColor, alpha);
+        diffuseColor = mix(vec4(0.2 * darken, 0.25 * darken, 0.05 * darken, fade), diffuseColor, colorMix);
+    #endif
     
     #ifndef VERTEX_LIGHTING
         float spotFallOff = 1.0;

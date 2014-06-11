@@ -10,6 +10,7 @@ uniform mat4 g_WorldMatrix;
 uniform mat3 g_NormalMatrix;
 uniform mat4 g_ViewMatrix;
 uniform vec3 g_CameraPosition;
+uniform float g_Time;
 
 uniform vec4 m_Ambient;
 uniform vec4 m_Diffuse;
@@ -31,7 +32,8 @@ varying vec4 DiffuseSum;
 varying vec3 SpecularSum;
 
 varying float vDistance;
-
+uniform sampler2D m_Noise;
+uniform vec3 m_WorldOffset;
 
 attribute vec3 inPosition;
 attribute vec2 inTexCoord;
@@ -164,7 +166,8 @@ void main(){
 
    // Find the world location of the vertex.  All three corners
    // will have the same vertex.
-   vec3 wPos = (g_WorldMatrix * modelSpacePos).xyz; 
+   vec3 wPos = (g_WorldMatrix * modelSpacePos).xyz;
+   vec2 groundPos = wPos.xz + m_WorldOffset.xz; 
 
    // We face the billboarded grass towards the camera's location
    // instead of parallel to the screen.  This keeps the blades from
@@ -192,6 +195,14 @@ void main(){
    // Move the upper parts of the triangle along the camera-perpendicular
    // vector (posOffset)    
    wPos += posOffset * offsetLength * size;
+
+   #ifdef USE_WIND
+    // some simple wind
+    vec4 noise = texture2D(m_Noise, vec2(groundPos.x * 0.01 + g_Time * 0.01, groundPos.y * 0.01));
+    //wPos.x += (noise.x * 0.5 - 0.25) * normalProjectionLength;
+    float strength = noise.y * 0.15 * size;
+    wPos.x += sin(g_Time * (1.0 + noise.x)) * normalProjectionLength * strength;
+   #endif
     
    gl_Position = g_ViewProjectionMatrix * vec4(wPos, 1.0);
 
