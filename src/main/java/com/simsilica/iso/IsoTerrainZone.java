@@ -77,6 +77,7 @@ public class IsoTerrainZone implements Zone {
     private Spatial wire;
     private Supplier<? extends MeshGenerator> generator;
     private Material terrainMaterial;
+    private boolean generateCollisionData;
 
     // For testing to make sure the builder and the pager are not
     // competing.  Leaving it in is just a bit of paranoia
@@ -88,7 +89,8 @@ public class IsoTerrainZone implements Zone {
                            Vector3f volumeSize, Vector3f volumeOffset, 
                            DensityVolume source,
                            Supplier<? extends MeshGenerator> generator,
-                           Material terrainMaterial )
+                           Material terrainMaterial,
+                           boolean generateCollisionData )
     {
         this.xCell = xCell;
         this.yCell = yCell;
@@ -99,6 +101,7 @@ public class IsoTerrainZone implements Zone {
         this.source = source;
         this.generator = generator;
         this.terrainMaterial = terrainMaterial;
+        this.generateCollisionData = generateCollisionData;
         this.node = new Node("Terrain[" + xCell + ", " + yCell + ", " + zCell + "]");        
     }
  
@@ -192,6 +195,7 @@ public class IsoTerrainZone implements Zone {
             }
  
             long time1 = System.nanoTime();
+            long time2 = time1;
     
             Mesh landMesh = generator.get().buildMesh(volume);
             if( landMesh != null ) {
@@ -201,6 +205,10 @@ public class IsoTerrainZone implements Zone {
                     log.debug("bounding shape:" + landMesh.getBound());
                 }                
                 land.setShadowMode(RenderQueue.ShadowMode.CastAndReceive);
+                time2 = System.nanoTime();
+                if( generateCollisionData ) {
+                    landMesh.createCollisionData();
+                } 
             } else {
                 land = null;
                 log.debug("Empty mesh.");
@@ -210,7 +218,8 @@ public class IsoTerrainZone implements Zone {
             if( log.isInfoEnabled() ) {
                 log.info("Total generation time:" + ((end-start)/1000000.0) + " ms");
                 log.info("  Density field:" + ((time1-start)/1000000.0) + " ms");
-                log.info("  Mesh generation:" + ((end-time1)/1000000.0) + " ms");
+                log.info("  Mesh generation:" + ((time2-time1)/1000000.0) + " ms");
+                log.info("  Collision data generation:" + ((end-time2)/1000000.0) + " ms");
             }
         } finally {
             accessLock.unlock();

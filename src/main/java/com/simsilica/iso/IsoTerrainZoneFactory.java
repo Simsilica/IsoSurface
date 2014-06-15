@@ -58,23 +58,27 @@ public class IsoTerrainZoneFactory implements ZoneFactory {
     private Vector3f volumeSize;
     private Vector3f volumeOffset;
     private Material terrainMaterial;
+    private boolean generateCollisionData;
 
     public IsoTerrainZoneFactory( DensityVolume worldVolume,
                                   Vector3f volumeSize, Vector3f volumeOffset,
                                   Supplier<? extends MeshGenerator> generator,
-                                  Material terrainMaterial ) {
+                                  Material terrainMaterial,
+                                  boolean generateCollisionData ) {
         this.worldVolume = worldVolume;
         this.generator = generator;
         this.volumeSize = volumeSize;
         this.volumeOffset = volumeOffset;
-        this.terrainMaterial = terrainMaterial;                               
+        this.terrainMaterial = terrainMaterial;
+        this.generateCollisionData = generateCollisionData;                               
     }
     
     public Zone createZone( PagedGrid pg, int xCell, int yCell, int zCell ) {
 
         IsoTerrainZone result = new IsoTerrainZone(xCell, yCell, zCell, pg.getGrid(), 
                                                    volumeSize, volumeOffset, worldVolume,
-                                                   generator, terrainMaterial);
+                                                   generator, terrainMaterial,
+                                                   generateCollisionData);
         
         return result; 
     }
