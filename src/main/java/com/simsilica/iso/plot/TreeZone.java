@@ -79,23 +79,24 @@ public class TreeZone extends AbstractZone {
 
     private Material material;
     private BilinearArray noise;
-    private Geometry trunkGeom;
-    private Geometry leafGeom;
-    private Geometry builtTrunkGeom;
-    private Geometry builtLeafGeom;
+    private Geometry[] geomArray;
+    private Geometry[] builtGeomArray;
     
-    private Node treeTemplate;
+    private TreeType[] treeTemplates;
         
     // For informational purposes, I just want to know what
     // the largest blade count generated for a zone is.
-    private static int maxBladeCount = 0;
+    private static int maxTreeCount = 0;
 
     public TreeZone( Grid grid, Material material, BilinearArray noise, int xCell, int yCell, int zCell,
-                     Node treeTemplate ) {
+                     Node... treeTemplates ) {
         super(grid, xCell, yCell, zCell);
         this.material = material;
         this.noise = noise;
-        this.treeTemplate = treeTemplate;
+        this.treeTemplates = new TreeType[treeTemplates.length];
+        for( int i = 0; i < treeTemplates.length; i++ ) {
+            this.treeTemplates[i] = new TreeType(treeTemplates[i]);
+        }        
     }
     
     public void build() {
@@ -103,7 +104,10 @@ public class TreeZone extends AbstractZone {
         Grid grid = getGrid();
         Vector3f size = grid.getCellSize();
         
-        FrequencyPlotter plotter = new FrequencyPlotter();
+        long seed = (long)getXCell() << 32 | getYCell();
+        Random random = new Random(seed);
+        
+        FrequencyPlotter plotter = new FrequencyPlotter(treeTemplates.length, random);
         if( getParentZone() != null ) {       
             // Find the parent relative corner.  This zone could be one of
             // several splitting up a larger zone.  To interact with the plotter
@@ -126,28 +130,53 @@ public class TreeZone extends AbstractZone {
             }
         }
  
-        if( !plotter.points.isEmpty() ) {
-            if( log.isInfoEnabled() ) {
-                log.info("Number of points plotted:" + plotter.points.size());
-            }
-            createTreeMesh(plotter.points, plotter.normals, plotter.colors, plotter.sizes);       
+        int totalTreeCount = 0;
+ 
+        // This loop will produce any number of geometry depending on the
+        // number of tree types used and the LOD.
+        List<Geometry> results = new ArrayList<Geometry>();
+ 
+        long start = System.nanoTime();              
+        for( int i = 0; i < treeTemplates.length; i++ ) {
+            TreeType type = treeTemplates[i];
+            TreeBin bin = plotter.bins[i];
             
-            // For statistics, let's keep track of the most number of blades
-            // that we generate
-            synchronized(this) {
-                int count = plotter.points.size();
-                if( count > maxBladeCount ) {
-                    maxBladeCount = count;
-                    log.info("New max blade count:" + (count / 2));
-                }
-            }   
+            if( bin.instances.isEmpty() ) {
+                continue;
+            }
+            
+            if( log.isInfoEnabled() ) {
+                log.info("bin[" + i + "] Number of points plotted:" + bin.instances.size());
+            }
+            totalTreeCount += bin.instances.size();
+ 
+            type.addBatch(results, 0, bin.instances);
         }
+        
+        long end = System.nanoTime();
+        if( log.isInfoEnabled() ) {
+            log.info("Built " + totalTreeCount + " trees in:" + ((end-start)/1000000.0) + " ms");
+        }
+        
+        builtGeomArray = new Geometry[results.size()];
+        builtGeomArray = results.toArray(builtGeomArray);
+        
+        // For statistics, let's keep track of the most number of trees
+        // that we generate
+        synchronized(getClass()) {
+            int count = totalTreeCount;
+            if( count > maxTreeCount ) {
+                maxTreeCount = count;
+                log.info("New max blade count:" + (count / 2));
+            }
+        }   
     }
 
+    /*
     private Geometry createBatch( List<Vector3f> points, List<Vector3f> normals,
                                   Geometry sourceGeom, Random random ) {        
         BatchTemplate bt = new BatchTemplate(sourceGeom, true);        
-        Geometry result = bt.createBatch(points, normals, random);
+        Geometry result = bt.createBatch(points, normals, null, random);
         return result;                                          
     }
 
@@ -157,7 +186,7 @@ public class TreeZone extends AbstractZone {
         long seed = (long)getXCell() << 32 | getYCell();
         Random random = new Random(seed);
  
-        Node lod1 = (Node)treeTemplate.getChild(0);
+        Node lod1 = (Node)treeTemplates[1].getChild(0);
         Geometry gTrunkLod1 = (Geometry)lod1.getChild(0);
         builtTrunkGeom = createBatch(points, normals, gTrunkLod1, random);
         builtTrunkGeom.setShadowMode(ShadowMode.CastAndReceive);
@@ -171,9 +200,15 @@ public class TreeZone extends AbstractZone {
             builtLeafGeom = null;
         }
         
-    }
+    } */
 
     public void apply() {
+        release(geomArray);
+        this.geomArray = builtGeomArray;
+        for( Geometry g : geomArray ) {
+            getZoneRoot().attachChild(g);
+        }
+/*         
         release(trunkGeom);
         release(leafGeom);
         this.trunkGeom = builtTrunkGeom;
@@ -183,12 +218,20 @@ public class TreeZone extends AbstractZone {
         }
         if( leafGeom != null ) {
             getZoneRoot().attachChild(leafGeom);
-        }
+        }*/
     }
 
     public void release() {
-        release(trunkGeom);
-        release(leafGeom);
+        release(geomArray);
+    }
+ 
+    protected void release( Geometry[] array ) {
+        if( array == null ) {
+            return;
+        }
+        for( Geometry g : array ) {
+            release(g);
+        }
     }
  
     protected void release( Geometry geom ) {
@@ -210,20 +253,68 @@ public class TreeZone extends AbstractZone {
             BufferUtils.destroyDirectBuffer( vb.getData() );
         }
     }
+    
+    private class TreeType {
+        Node treeTemplate;
+        
+        BatchTemplate[][] lodTemplates = new BatchTemplate[3][];
+        
+        public TreeType( Node treeTemplate ) {
+            // Setup the different batch templates for each
+            // LOD
+            setLod(0, (Node)treeTemplate.getChild(0)); 
+            setLod(1, (Node)treeTemplate.getChild(1)); 
+            setLod(2, (Node)treeTemplate.getChild(2)); 
+        }
+        
+        protected final void setLod( int lod, Node tree ) {
+            lodTemplates[lod] = new BatchTemplate[tree.getQuantity()];
+            for( int i = 0; i < tree.getQuantity(); i++ ) {
+                Geometry geom = (Geometry)tree.getChild(i);
+                lodTemplates[lod][i] = new BatchTemplate(geom, true);
+            }
+        } 
+
+        public void addBatch( List<Geometry> results, int lod, List<BatchInstance> instances ) { 
+                              
+            BatchTemplate[] templates = lodTemplates[lod];
+            for( BatchTemplate bt : templates ) {
+                Geometry geom = bt.createBatch(instances);
+                if( geom != null ) {
+                    results.add(geom);
+                }
+            }
+        }                
+    }
+    
+    private class TreeBin {
+        List<BatchInstance> instances;
+        
+        public TreeBin() {
+            instances = new ArrayList<BatchInstance>();
+        }
+    }
  
     protected class FrequencyPlotter implements TriangleProcessor {
-
-        List<Vector3f> points = new ArrayList<Vector3f>();
-        List<Vector3f> normals = new ArrayList<Vector3f>();
-        List<ColorRGBA> colors = new ArrayList<ColorRGBA>(); 
-        List<Float> sizes = new ArrayList<Float>();
+ 
+        Random random;   
+        TreeBin[] bins;
+        
         float threshold = FastMath.sin(FastMath.QUARTER_PI);
         Vector3f min;
         Vector3f max;
         Vector3f world;
         int processedTriangleCount;
+        int binCount;
 
-        public FrequencyPlotter() {
+        public FrequencyPlotter( int binCount, Random random ) {
+            this.binCount = binCount;
+            this.bins = new TreeBin[binCount];
+            this.random = random;
+            
+            for( int i = 0; i < binCount; i++ ) {
+                bins[i] = new TreeBin();
+            }
         }
 
         private boolean inZone( Vector3f v ) {
@@ -335,6 +426,8 @@ public class TreeZone extends AbstractZone {
             // Start at the Barycentric coordinates for the
             // min corner.
             Vector3f p = new Vector3f(minX, 0, minZ);
+            
+            Quaternion upRot = new Quaternion(); // reused in the inner loop
  
             // Rasterize
             for( p.z = minZ; p.z < maxZ; p.z += resolution ) {
@@ -406,7 +499,7 @@ public class TreeZone extends AbstractZone {
                             float offset3 = ((noiseValues3[1] & 0xff) / 255f) - 0.5f;
                             float altOffset = Math.min(1, Math.max(0, (offset1 + offset3 + normalOffset)));
                             if( offset > 0.5 && altOffset > 0.5 ) {
-                                    
+ 
                                 // Trees are at a lower resolution
                                 boolean tall = offset > 0.75 && altOffset > 0.5;                               
                                 float treeResolution = resolution * 5;
@@ -414,8 +507,33 @@ public class TreeZone extends AbstractZone {
                                     treeResolution *= 2;
                                 }
                                 if( (plot.x % treeResolution) < 0.1
-                                    && (plot.z % treeResolution) < 0.1 ) {                                
-                                    if( tall ) {
+                                    && (plot.z % treeResolution) < 0.1 ) {
+ 
+                                    // Figure out which bin we should be in
+                                    float binOffset = (offset - 0.5f) + (altOffset - 0.5f);
+                                    int bin = (int)Math.round(binOffset * (binCount-1)); 
+                                    
+                                    BatchInstance instance = new BatchInstance();
+                                    instance.position = plot;
+                                    instance.scale = 1;
+                                                       
+                                    // Create the random but directed rotation
+                                    Vector3f n = newNorm.addLocal(0, 1, 0).normalizeLocal();                                                
+                                    Quaternion rot = new Quaternion();
+                                    rot.fromAngles(0, FastMath.TWO_PI * random.nextFloat(), 0);
+                                     
+                                    // Make the quaternion's "up" be the normal provided
+                                    float angle = Vector3f.UNIT_Y.angleBetween(n);
+                                    if( Math.abs(angle) > 0 ) {
+                                        Vector3f axis = Vector3f.UNIT_Y.cross(n).normalizeLocal();
+                                        upRot.fromAngleNormalAxis(angle, axis);
+                                        upRot.mult(rot, rot);
+                                    }
+                                                                                                                    
+                                    instance.rotation = rot;
+                                    
+                                    bins[bin].instances.add(instance);
+                                    /*if( tall ) {
                                         sizes.add(8.8f);
                                     } else {
                                         sizes.add(4.25f); 
@@ -423,7 +541,11 @@ public class TreeZone extends AbstractZone {
                                     points.add(plot);                                                
                                     Vector3f n = newNorm.add(0, 1, 0).normalizeLocal();                                                 
                                     normals.add(n);
-                                    colors.add(ColorRGBA.White);
+                                    colors.add(ColorRGBA.White);*/
+                                    //bins[bin].points.add(plot);
+                                    //Vector3f n = newNorm.add(0, 1, 0).normalizeLocal();                                                 
+                                    //bins[bin].upVectors.add(n);
+                                    //bins[bin].sizes.add(binOffset);
                                 }
                             }                           
                         } 
@@ -437,16 +559,16 @@ public class TreeZone extends AbstractZone {
     public static class Factory implements ZoneFactory {
         private Material material;
         private BilinearArray noise;
-        private Node treeTemplate;
+        private Node[] treeTemplates;
         
-        public Factory( Material material, BilinearArray noise, Node treeTemplate ) {
+        public Factory( Material material, BilinearArray noise, Node... treeTemplates ) {
             this.noise = noise;
             this.material = material;
-            this.treeTemplate = treeTemplate;
+            this.treeTemplates = treeTemplates;
         }
         
         public Zone createZone( PagedGrid pg, int xCell, int yCell, int zCell ) {
-            Zone result = new TreeZone(pg.getGrid(), material, noise, xCell, yCell, zCell, treeTemplate);
+            Zone result = new TreeZone(pg.getGrid(), material, noise, xCell, yCell, zCell, treeTemplates);
             return result;   
         }        
     }

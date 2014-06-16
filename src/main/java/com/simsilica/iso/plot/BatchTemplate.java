@@ -136,8 +136,7 @@ public class BatchTemplate {
         }
     }
 
-    public Geometry createBatch( List<Vector3f> positions, List<Vector3f> upVectors,
-                                 Random random ) {
+    public Geometry createBatch( List<BatchInstance> instances ) {
         
         Vector3f offset = sourceGeom.getWorldTranslation();
         
@@ -158,7 +157,7 @@ public class BatchTemplate {
          
         int texComponents = source.getBuffer(Type.TexCoord).getNumComponents();
                   
-        int triCount = positions.size() * source.getTriangleCount();
+        int triCount = instances.size() * source.getTriangleCount();
         FloatBuffer pb = BufferUtils.createVector3Buffer(triCount * 3);        
         FloatBuffer nb = BufferUtils.createVector3Buffer(triCount * 3);
         FloatBuffer tb = BufferUtils.createVector2Buffer(triCount * texComponents);
@@ -178,16 +177,15 @@ public class BatchTemplate {
             ibInt = (IntBuffer)VertexBuffer.createBuffer(Format.UnsignedInt, 3, triCount);
         }       
  
-        Quaternion rot = new Quaternion();
-        Quaternion upRot = new Quaternion();
         Vector3f point = new Vector3f();
  
         // We're making a line mesh... so just render 
         // the point and a point + normal
         int lastIndex = 0;
-        for( int i = 0; i < positions.size(); i++ ) {
-            Vector3f p1 = positions.get(i);
-            Vector3f normal = upVectors.get(i);
+        for( BatchInstance instance : instances ) { 
+            Vector3f p1 = instance.position;
+            Quaternion rot = instance.rotation;
+            float scale = instance.scale;
             
             tPos.rewind();
             tNorm.rewind();
@@ -199,23 +197,13 @@ public class BatchTemplate {
                 tSize.rewind();
             }
   
-            rot.fromAngles(0, FastMath.TWO_PI * random.nextFloat(), 0); 
- 
-            // Make the quaternion's "up" be the normal provided
-            float angle = Vector3f.UNIT_Y.angleBetween(normal);
-            if( Math.abs(angle) > 0 ) {
-                Vector3f axis = Vector3f.UNIT_Y.cross(normal).normalizeLocal();
-                upRot.fromAngleNormalAxis(angle, axis);
-                upRot.mult(rot, rot);
-            }
-                                          
             for( int v = 0; v < templateVertexCount; v++ ) {
                 point.set(tPos.get(), tPos.get(), tPos.get());
                 rot.mult(point, point);
  
-                pb.put(point.x + p1.x + offset.x); 
-                pb.put(point.y + p1.y + offset.y); 
-                pb.put(point.z + p1.z + offset.z);
+                pb.put((point.x * scale) + p1.x + offset.x); 
+                pb.put((point.y * scale) + p1.y + offset.y); 
+                pb.put((point.z * scale) + p1.z + offset.z);
                 
                 point.set(tNorm.get(), tNorm.get(), tNorm.get());
                 rot.mult(point, point);
