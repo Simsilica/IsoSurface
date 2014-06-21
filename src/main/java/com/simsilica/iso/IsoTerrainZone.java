@@ -105,6 +105,10 @@ public class IsoTerrainZone implements Zone {
         this.node = new Node("Terrain[" + xCell + ", " + yCell + ", " + zCell + "]");        
     }
  
+    public boolean setRelativeGridLocation( int x, int y, int z ) {
+        return false;
+    }
+ 
     public Grid getGrid() {
         return grid;
     }

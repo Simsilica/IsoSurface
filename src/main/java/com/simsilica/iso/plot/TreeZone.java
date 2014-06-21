@@ -75,7 +75,7 @@ import org.slf4j.LoggerFactory;
  */
 public class TreeZone extends AbstractZone {
 
-    static Logger log = LoggerFactory.getLogger(PlotFrequencyZone.class);
+    static Logger log = LoggerFactory.getLogger(TreeZone.class);
 
     private Material material;
     private BilinearArray noise;
@@ -83,10 +83,14 @@ public class TreeZone extends AbstractZone {
     private Geometry[] builtGeomArray;
     
     private TreeType[] treeTemplates;
+ 
+    private int detailLevel = 0; // 0 == closest, highest detail
         
     // For informational purposes, I just want to know what
     // the largest blade count generated for a zone is.
     private static int maxTreeCount = 0;
+    
+    private TreeBin[] zoneInstances;
 
     public TreeZone( Grid grid, Material material, BilinearArray noise, int xCell, int yCell, int zCell,
                      Node... treeTemplates ) {
@@ -98,39 +102,68 @@ public class TreeZone extends AbstractZone {
             this.treeTemplates[i] = new TreeType(treeTemplates[i]);
         }        
     }
-    
+ 
+    protected boolean setDetailLevel( int i ) {
+        if( this.detailLevel == i ) {
+            return false;
+        }
+//System.out.println( "Detail level changed:" + i );        
+        this.detailLevel = i;
+        return true;
+    }
+ 
+    @Override
+    public boolean setRelativeGridLocation( int x, int y, int z ) {
+ 
+//System.out.println( "setRelativeGridLocation(" + x + ", " + y + ", " + z + ")" );    
+        // A simple calculation at least for now
+        x = Math.abs(x);
+        z = Math.abs(z);
+        int level = Math.min(x, z);
+        if( level > 0 ) {
+            level--;
+        }
+        boolean result = setDetailLevel(Math.min(level, 2));
+//System.out.println( "rebuild:" + result );        
+        return result;         
+    }
+   
     public void build() {
 
         Grid grid = getGrid();
         Vector3f size = grid.getCellSize();
         
-        long seed = (long)getXCell() << 32 | getYCell();
-        Random random = new Random(seed);
-        
-        FrequencyPlotter plotter = new FrequencyPlotter(treeTemplates.length, random);
-        if( getParentZone() != null ) {       
-            // Find the parent relative corner.  This zone could be one of
-            // several splitting up a larger zone.  To interact with the plotter
-            // we need to know what area of the parent we should be scanning.
-            Vector3f worldLoc = grid.toWorld(getXCell(), getYCell(), getZCell(), null);
-            Vector3f parentLoc = getParentZone().getWorldLocation(null);
-            plotter.world = worldLoc;
-            plotter.min = worldLoc.subtract(parentLoc);
-            log.trace("Cell min:" + plotter.min);
-                        
-            plotter.max = plotter.min.add(grid.getCellSize());
-            
-            // Scan the triangles for valid grass plots using the plotter.
-            long start = System.nanoTime();
-            int count = TriangleUtils.processTriangles(getParentZone().getZoneRoot(), plotter);
-            long end = System.nanoTime();
-            if( count > 0 && log.isInfoEnabled() ) {
-                log.info("Plotted points for " + plotter.processedTriangleCount + " / " + count 
-                            + " triangles in:" + ((end-start)/1000000.0) + " ms");
+        if( zoneInstances == null ) {
+            long seed = (long)getXCell() << 32 | getYCell();
+            Random random = new Random(seed);
+         
+            FrequencyPlotter plotter = new FrequencyPlotter(treeTemplates.length, random);
+            if( getParentZone() != null ) {       
+                // Find the parent relative corner.  This zone could be one of
+                // several splitting up a larger zone.  To interact with the plotter
+                // we need to know what area of the parent we should be scanning.
+                Vector3f worldLoc = grid.toWorld(getXCell(), getYCell(), getZCell(), null);
+                Vector3f parentLoc = getParentZone().getWorldLocation(null);
+                plotter.world = worldLoc;
+                plotter.min = worldLoc.subtract(parentLoc);
+                log.trace("Cell min:" + plotter.min);
+                            
+                plotter.max = plotter.min.add(grid.getCellSize());
+                
+                // Scan the triangles for valid grass plots using the plotter.
+                long start = System.nanoTime();
+                int count = TriangleUtils.processTriangles(getParentZone().getZoneRoot(), plotter);
+                long end = System.nanoTime();
+                if( count > 0 && log.isInfoEnabled() ) {
+                    log.info("Plotted points for " + plotter.processedTriangleCount + " / " + count 
+                                + " triangles in:" + ((end-start)/1000000.0) + " ms");
+                }
             }
+            zoneInstances = plotter.bins;
         }
- 
         int totalTreeCount = 0;
+ 
+System.out.println( "Building trees with detail level:" + detailLevel );
  
         // This loop will produce any number of geometry depending on the
         // number of tree types used and the LOD.
@@ -139,7 +172,8 @@ public class TreeZone extends AbstractZone {
         long start = System.nanoTime();              
         for( int i = 0; i < treeTemplates.length; i++ ) {
             TreeType type = treeTemplates[i];
-            TreeBin bin = plotter.bins[i];
+            //TreeBin bin = plotter.bins[i];
+            TreeBin bin = zoneInstances[i];
             
             if( bin.instances.isEmpty() ) {
                 continue;
@@ -150,7 +184,8 @@ public class TreeZone extends AbstractZone {
             }
             totalTreeCount += bin.instances.size();
  
-            type.addBatch(results, 0, bin.instances);
+            type.addBatch(results, detailLevel, bin.instances);
+            //type.addBatch(results, 2, bin.instances);
         }
         
         long end = System.nanoTime();
@@ -172,53 +207,14 @@ public class TreeZone extends AbstractZone {
         }   
     }
 
-    /*
-    private Geometry createBatch( List<Vector3f> points, List<Vector3f> normals,
-                                  Geometry sourceGeom, Random random ) {        
-        BatchTemplate bt = new BatchTemplate(sourceGeom, true);        
-        Geometry result = bt.createBatch(points, normals, null, random);
-        return result;                                          
-    }
-
-    private void createTreeMesh( List<Vector3f> points, List<Vector3f> normals, 
-                                 List<ColorRGBA> colors, List<Float> sizes ) {
- 
-        long seed = (long)getXCell() << 32 | getYCell();
-        Random random = new Random(seed);
- 
-        Node lod1 = (Node)treeTemplates[1].getChild(0);
-        Geometry gTrunkLod1 = (Geometry)lod1.getChild(0);
-        builtTrunkGeom = createBatch(points, normals, gTrunkLod1, random);
-        builtTrunkGeom.setShadowMode(ShadowMode.CastAndReceive);
-         
-        Geometry gLeafLod1 = null;
-        if( lod1.getQuantity() > 1 ) {
-            gLeafLod1 = (Geometry)lod1.getChild(1);
-            builtLeafGeom = createBatch(points, normals, gLeafLod1, random);
-            builtLeafGeom.setShadowMode(ShadowMode.CastAndReceive);
-        } else {
-            builtLeafGeom = null;
-        }
-        
-    } */
-
     public void apply() {
         release(geomArray);
         this.geomArray = builtGeomArray;
-        for( Geometry g : geomArray ) {
-            getZoneRoot().attachChild(g);
+        if( geomArray != null ) {
+            for( Geometry g : geomArray ) {
+                getZoneRoot().attachChild(g);
+            }
         }
-/*         
-        release(trunkGeom);
-        release(leafGeom);
-        this.trunkGeom = builtTrunkGeom;
-        this.leafGeom = builtLeafGeom; 
-        if( trunkGeom != null ) {
-            getZoneRoot().attachChild(trunkGeom);
-        }
-        if( leafGeom != null ) {
-            getZoneRoot().attachChild(leafGeom);
-        }*/
     }
 
     public void release() {
@@ -229,9 +225,12 @@ public class TreeZone extends AbstractZone {
         if( array == null ) {
             return;
         }
+        long start = System.nanoTime();
         for( Geometry g : array ) {
             release(g);
         }
+        long end = System.nanoTime();
+//        System.out.println("Released tree batches in:" + ((end-start)/1000000.0) + " ms");
     }
  
     protected void release( Geometry geom ) {

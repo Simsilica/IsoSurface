@@ -143,7 +143,10 @@ public class BatchTemplate {
         int templateVertexCount = source.getVertexCount();
         
         FloatBuffer tPos = source.getFloatBuffer(Type.Position).duplicate();
-        FloatBuffer tNorm = source.getFloatBuffer(Type.Normal).duplicate();
+        FloatBuffer tNorm = source.getFloatBuffer(Type.Normal);
+        if( tNorm != null ) {
+            tNorm = tNorm.duplicate();
+        }
         FloatBuffer tTex = source.getFloatBuffer(Type.TexCoord).duplicate();
         FloatBuffer tTan = source.getFloatBuffer(Type.Tangent);
         if( tTan != null ) {
@@ -159,7 +162,10 @@ public class BatchTemplate {
                   
         int triCount = instances.size() * source.getTriangleCount();
         FloatBuffer pb = BufferUtils.createVector3Buffer(triCount * 3);        
-        FloatBuffer nb = BufferUtils.createVector3Buffer(triCount * 3);
+        FloatBuffer nb = null;
+        if( tNorm != null ) {
+            nb = BufferUtils.createVector3Buffer(triCount * 3);
+        }
         FloatBuffer tb = BufferUtils.createVector2Buffer(triCount * texComponents);
         FloatBuffer tanb = null;
         if( tTan != null ) {
@@ -188,7 +194,9 @@ public class BatchTemplate {
             float scale = instance.scale;
             
             tPos.rewind();
-            tNorm.rewind();
+            if( tNorm != null ) {
+                tNorm.rewind();
+            }
             tTex.rewind();
             if( tTan != null ) {
                 tTan.rewind();
@@ -204,13 +212,15 @@ public class BatchTemplate {
                 pb.put((point.x * scale) + p1.x + offset.x); 
                 pb.put((point.y * scale) + p1.y + offset.y); 
                 pb.put((point.z * scale) + p1.z + offset.z);
+             
+                if( nb != null ) {
+                    point.set(tNorm.get(), tNorm.get(), tNorm.get());
+                    rot.mult(point, point);
                 
-                point.set(tNorm.get(), tNorm.get(), tNorm.get());
-                rot.mult(point, point);
-                
-                nb.put(point.x); 
-                nb.put(point.y); 
-                nb.put(point.z);
+                    nb.put(point.x); 
+                    nb.put(point.y); 
+                    nb.put(point.z);
+                }
  
                 for( int t = 0; t < texComponents; t++ ) {               
                     tb.put(tTex.get()); 
@@ -249,7 +259,9 @@ public class BatchTemplate {
  
         Mesh batch = new Mesh();
         batch.setBuffer(Type.Position, 3, pb);
-        batch.setBuffer(Type.Normal, 3, nb);
+        if( nb != null ) {
+            batch.setBuffer(Type.Normal, 3, nb);
+        }
         batch.setBuffer(Type.TexCoord, texComponents, tb);
         if( tanb != null ) {
             batch.setBuffer(Type.Tangent, 3, tanb);
