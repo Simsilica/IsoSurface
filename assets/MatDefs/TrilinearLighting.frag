@@ -3,7 +3,8 @@
 #define ATTENUATION
 //#define HQ_ATTENUATION
 
-
+#import "MatDefs/FragScattering.glsllib"
+ 
 // Trinlinear mapping related stuff
 uniform mat3 g_NormalMatrix;
 varying vec3 worldNormal;
@@ -381,9 +382,16 @@ void main(){
            light.y = texture2D(m_ColorRamp, vec2(light.y, 0.0)).r;
        #endif
 
-       gl_FragColor.rgb =  AmbientSum     * diffuseColor.rgb + 
-                           DiffuseSum.rgb * diffuseColor.rgb  * vec3(light.x) +
-                           SpecularSum    * specularColor.rgb * vec3(light.y);
+        #ifndef USE_SCATTERING
+            gl_FragColor.rgb =  AmbientSum     * diffuseColor.rgb + 
+                                DiffuseSum.rgb * diffuseColor.rgb  * vec3(light.x) +
+                                SpecularSum    * specularColor.rgb * vec3(light.y);
+        #else
+            vec3 color = AmbientSum     * diffuseColor.rgb + 
+                         DiffuseSum.rgb * diffuseColor.rgb  * vec3(light.x) +
+                         SpecularSum    * specularColor.rgb * vec3(light.y);
+            gl_FragColor.rgb =  calculateGroundColor(vec4(color, 1.0)).rgb;
+        #endif            
     #else
        vec4 lightDir = vLightDir;
        lightDir.xyz = normalize(lightDir.xyz);
@@ -408,9 +416,16 @@ void main(){
             light.y = 1.0;
        #endif
 
-       gl_FragColor.rgb =  AmbientSum       * diffuseColor.rgb  +
-                           DiffuseSum.rgb   * diffuseColor.rgb  * vec3(light.x) +
-                           SpecularSum2.rgb * specularColor.rgb * vec3(light.y);
+        #ifndef USE_SCATTERING
+            gl_FragColor.rgb =  AmbientSum     * diffuseColor.rgb + 
+                                DiffuseSum.rgb * diffuseColor.rgb  * vec3(light.x) +
+                                SpecularSum    * specularColor.rgb * vec3(light.y);
+        #else
+            vec3 color = AmbientSum     * diffuseColor.rgb + 
+                         DiffuseSum.rgb * diffuseColor.rgb  * vec3(light.x) +
+                         SpecularSum    * specularColor.rgb * vec3(light.y);
+            gl_FragColor.rgb =  calculateGroundColor(vec4(color, 1.0)).rgb;
+        #endif            
     #endif
     gl_FragColor.a = alpha;
 }

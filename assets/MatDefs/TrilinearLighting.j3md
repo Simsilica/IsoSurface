@@ -147,6 +147,19 @@ MaterialDef Phong Lighting {
         
         Texture2D Noise
         Float LowResDistance: 32.0
+ 
+        // Ground scattering parameters
+        Boolean UseScattering       
+        Vector3 SunPosition
+        Float Exposure        
+        Float KmESun
+        Float InnerRadius        
+        Float RadiusScale
+        Float PlanetScale : 1        
+        Vector3 InvWavelengthsKrESun        
+        Float AverageDensityScale
+        Float InvAverageDensityHeight;
+        Vector3 KWavelengths4PI;        
         
     }
 
@@ -194,6 +207,8 @@ MaterialDef Phong Lighting {
             SPHERE_MAP : SphereMap  
 
             NUM_BONES : NumberOfBones
+            
+            USE_SCATTERING : UseScattering            
         }
     }
 
