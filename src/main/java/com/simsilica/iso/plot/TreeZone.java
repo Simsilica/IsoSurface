@@ -281,6 +281,7 @@ System.out.println( "Building trees with detail level:" + detailLevel );
                 Geometry geom = bt.createBatch(instances);
                 if( geom != null ) {
                     results.add(geom);
+                    geom.setShadowMode(ShadowMode.CastAndReceive);
                 }
             }
         }                
