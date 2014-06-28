@@ -183,7 +183,7 @@ void main(){
    
    #ifdef USE_SCATTERING
       vec4 wPos = g_WorldMatrix * modelSpacePos;
-      calculateVertexGroundScattering(wPos.xyz + m_WorldOffset, g_CameraPosition);
+      calculateVertexGroundScattering(wPos.xyz, g_CameraPosition);
    #endif
 
    vec3 wvPosition = (g_WorldViewMatrix * modelSpacePos).xyz;
