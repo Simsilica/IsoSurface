@@ -37,7 +37,6 @@
 package com.simsilica.iso.plot;
 
 import com.jme3.material.Material;
-import com.jme3.math.ColorRGBA;
 import com.jme3.math.FastMath;
 import com.jme3.math.Quaternion;
 import com.jme3.math.Vector3f;
@@ -46,8 +45,8 @@ import com.jme3.scene.Geometry;
 import com.jme3.scene.Mesh;
 import com.jme3.scene.Node;
 import com.jme3.scene.VertexBuffer;
-import com.jme3.scene.VertexBuffer.Type;
 import com.jme3.util.BufferUtils;
+import com.simsilica.builder.Builder;
 import com.simsilica.iso.tri.TriangleUtils;
 import com.simsilica.iso.tri.Triangle;
 import com.simsilica.iso.tri.TriangleProcessor;
@@ -57,12 +56,10 @@ import com.simsilica.pager.Grid;
 import com.simsilica.pager.PagedGrid;
 import com.simsilica.pager.Zone;
 import com.simsilica.pager.ZoneFactory;
-import java.nio.FloatBuffer;
-import java.nio.IntBuffer;
-import java.nio.ShortBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -92,6 +89,14 @@ public class TreeZone extends AbstractZone {
     
     private TreeBin[] zoneInstances;
 
+    // Just some book-keeping left over from memory leak checks.    
+    private static AtomicInteger totalAllocationCount = new AtomicInteger();
+    private static AtomicInteger totalDestroyCount = new AtomicInteger();
+    private AtomicInteger allocationCount = new AtomicInteger();
+    private AtomicInteger destroyCount = new AtomicInteger();
+    private AtomicInteger activeBuffers = new AtomicInteger();
+
+
     public TreeZone( Grid grid, Material material, BilinearArray noise, int xCell, int yCell, int zCell,
                      Node... treeTemplates ) {
         super(grid, xCell, yCell, zCell);
@@ -100,14 +105,13 @@ public class TreeZone extends AbstractZone {
         this.treeTemplates = new TreeType[treeTemplates.length];
         for( int i = 0; i < treeTemplates.length; i++ ) {
             this.treeTemplates[i] = new TreeType(treeTemplates[i]);
-        }        
+        }
     }
  
     protected boolean setDetailLevel( int i ) {
         if( this.detailLevel == i ) {
             return false;
         }
-//System.out.println( "Detail level changed:" + i );        
         this.detailLevel = i;
         return true;
     }
@@ -115,7 +119,6 @@ public class TreeZone extends AbstractZone {
     @Override
     public boolean setRelativeGridLocation( int x, int y, int z ) {
  
-//System.out.println( "setRelativeGridLocation(" + x + ", " + y + ", " + z + ")" );    
         // A simple calculation at least for now
         x = Math.abs(x);
         z = Math.abs(z);
@@ -124,7 +127,6 @@ public class TreeZone extends AbstractZone {
             level--;
         }
         boolean result = setDetailLevel(Math.min(level, 2));
-//System.out.println( "rebuild:" + result );        
         return result;         
     }
    
@@ -163,8 +165,6 @@ public class TreeZone extends AbstractZone {
         }
         int totalTreeCount = 0;
  
-System.out.println( "Building trees with detail level:" + detailLevel );
- 
         // This loop will produce any number of geometry depending on the
         // number of tree types used and the LOD.
         List<Geometry> results = new ArrayList<Geometry>();
@@ -195,6 +195,9 @@ System.out.println( "Building trees with detail level:" + detailLevel );
         
         builtGeomArray = new Geometry[results.size()];
         builtGeomArray = results.toArray(builtGeomArray);
+        allocationCount.incrementAndGet();
+        totalAllocationCount.incrementAndGet();
+        activeBuffers.incrementAndGet();
         
         // For statistics, let's keep track of the most number of trees
         // that we generate
@@ -207,9 +210,11 @@ System.out.println( "Building trees with detail level:" + detailLevel );
         }   
     }
 
-    public void apply() {
+    @Override
+    public void apply( Builder builder ) {
         release(geomArray);
         this.geomArray = builtGeomArray;
+        builtGeomArray = null;
         if( geomArray != null ) {
             for( Geometry g : geomArray ) {
                 getZoneRoot().attachChild(g);
@@ -217,20 +222,50 @@ System.out.println( "Building trees with detail level:" + detailLevel );
         }
     }
 
-    public void release() {
+    boolean released = false;
+    @Override
+    public void release( Builder builder ) {
+        // Just a left-over test I'm too paranoid to remove
+        if( released ) {
+            throw new RuntimeException( "Already released once." );
+        }
+        released = true;
+        
         release(geomArray);
+        geomArray = null;
+
+        // Release an array we may have built but not applied
+        release(builtGeomArray);
+        builtGeomArray = null;
+ 
+        if( log.isTraceEnabled() ) {
+            log.trace("release():" + this );
+            log.trace(this + " allocationCount:" + allocationCount);
+            log.trace(this + " destroyCount:" + destroyCount);
+            log.trace("total allocation:" + totalAllocationCount);        
+            log.trace("total destroy:" + totalDestroyCount);
+        }
+        if( allocationCount.get() != destroyCount.get() ) {
+            log.warn(this + " destroy mismatch " + (allocationCount.get() - destroyCount.get()) );
+        }        
     }
  
     protected void release( Geometry[] array ) {
         if( array == null ) {
             return;
         }
+ 
+        destroyCount.incrementAndGet();       
+        totalDestroyCount.incrementAndGet();
+        if( activeBuffers.decrementAndGet() < 0 ) {
+            throw new RuntimeException("Mismatched buffer destroy, zone:" + this);
+        }
         long start = System.nanoTime();
         for( Geometry g : array ) {
             release(g);
         }
         long end = System.nanoTime();
-//        System.out.println("Released tree batches in:" + ((end-start)/1000000.0) + " ms");
+//              System.out.println("Released tree batches in:" + ((end-start)/1000000.0) + " ms");
     }
  
     protected void release( Geometry geom ) {

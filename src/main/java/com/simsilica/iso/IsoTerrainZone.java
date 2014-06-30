@@ -46,6 +46,7 @@ import com.jme3.scene.Node;
 import com.jme3.scene.Spatial;
 import com.jme3.scene.VertexBuffer;
 import com.jme3.util.BufferUtils;
+import com.simsilica.builder.Builder;
 import com.simsilica.iso.volume.ArrayDensityVolume;
 import com.simsilica.pager.Grid;
 import com.simsilica.pager.Zone;
@@ -230,7 +231,8 @@ public class IsoTerrainZone implements Zone {
         }                
     }
 
-    public void apply() {
+    @Override
+    public void apply( Builder builder ) {
         if( !accessLock.tryLock() ) {
             throw new IllegalStateException("Thread is still building.");
         }
@@ -243,7 +245,8 @@ public class IsoTerrainZone implements Zone {
         }
     }
 
-    public void release() {
+    @Override
+    public void release( Builder builder ) {
         if( log.isTraceEnabled() ) {
             log.trace("IsoLandReference.release():" + this );
         }
