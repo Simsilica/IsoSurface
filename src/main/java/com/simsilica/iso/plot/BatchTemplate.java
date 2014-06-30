@@ -277,7 +277,8 @@ public class BatchTemplate {
         batch.updateBound();
  
         Geometry result = new Geometry("batch:" + sourceGeom.getName(), batch);
-        result.setMaterial(sourceGeom.getMaterial());        
+        result.setMaterial(sourceGeom.getMaterial());
+        result.setQueueBucket(sourceGeom.getQueueBucket());        
         return result;                                          
     }
  
