@@ -186,7 +186,11 @@ public class GrassZone extends AbstractZone {
         
         builtGeom = new Geometry("grass", grassMesh);
         builtGeom.setQueueBucket(Bucket.Transparent);
-        builtGeom.setMaterial(material);                 
+        builtGeom.setMaterial(material);
+        
+        // Give the built geometry a higher layer so it's
+        // rendered after trees and stuff
+        builtGeom.setUserData("layer", 9);                 
     }
 
     @Override
