@@ -57,6 +57,8 @@ import com.simsilica.pager.Zone;
 import com.simsilica.pager.ZoneFactory;
 import java.nio.FloatBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -83,58 +85,176 @@ public class GrassZone extends AbstractZone {
     // the largest blade count generated for a zone is.
     private static int maxBladeCount = 0;
 
+    private List<Blade> grassBlades;
+    private int xGrid;
+    private int zGrid;
+    private float xWorld;
+    private float zWorld;
+    private Vector3f sortOrigin = new Vector3f();
+    private DistanceComparator distanceSort = new DistanceComparator(); 
+
     public GrassZone( Grid grid, Material material, BilinearArray noise, int xCell, int yCell, int zCell ) {
         super(grid, xCell, yCell, zCell);
         this.material = material;
         this.noise = noise;
+        this.xWorld = grid.toWorldX(xCell);
+        this.zWorld = grid.toWorldZ(zCell);
+    }
+    
+    @Override
+    public boolean setRelativeGridLocation( int x, int y, int z ) {
+        if( xGrid == x && zGrid == z ) {
+            return false;
+        }
+        this.xGrid = x;
+        this.zGrid = z;
+        // Calculate the sort origin as if it's the center of the center
+        // cell.
+        Vector3f size = getGrid().getCellSize();
+        Vector3f v = new Vector3f(-(x + 0.5f), 0, -(z + 0.5f));
+        v.normalizeLocal();
+        v.multLocal(size);
+        setSortOrigin(v.x, v.z, true);
+        return false;
+    }
+    
+    @Override
+    public boolean setViewLocation( float x, float z ) {
+        return setSortOrigin(x - xWorld, z - zWorld, false);
+    }
+    
+    protected boolean setSortOrigin( float x, float z, boolean force ) {
+        if( sortOrigin.x == x && sortOrigin.z == z ) {
+            return false;
+        }
+        if( grassBlades == null ) {
+            return false;
+        }
+                
+        sortOrigin.set(x, 0, z);
+
+        boolean resort = force;
+        if( xGrid == 0 && zGrid == 0 ) {
+            // Always resort the center cell
+            resort = true;
+        } else {
+            // Need to figure out how close we are to the cell's
+            // center.  x and z are relative to the cells corner.
+            // x = xView - xWorld but we want xView - (xWorld + 16)
+            // ...so we should be able to just subtract 16.
+            float halfSize = getGrid().getCellSize().x * 0.5f;
+            if( Math.abs(x - halfSize) < 20 && Math.abs(z - halfSize) < 20 ) {
+                // We are within 4 meters of the border so resort
+                resort = true;
+            }
+        }
+
+        if( resort ) {
+            updateSort();
+        }
+        return resort;
+    }
+            
+    protected void updateSort() {
+ 
+        //long start = System.nanoTime();
+                       
+        Collections.sort(grassBlades, distanceSort);
+        //long mid = System.nanoTime();
+        
+        // Update the mesh if we have one
+        if( grassGeom == null ) {
+            return;
+        }
+        Mesh mesh = grassGeom.getMesh();
+        FloatBuffer pb = mesh.getFloatBuffer(Type.Position);
+        FloatBuffer tb = mesh.getFloatBuffer(Type.TexCoord);
+        FloatBuffer nb = mesh.getFloatBuffer(Type.Normal);
+        
+        pb.rewind();
+        tb.rewind();
+        nb.rewind();
+ 
+        for( Blade blade : grassBlades ) {       
+            Vector3f p1 = blade.pos;
+            Vector3f normal = blade.dir;
+            Float size = blade.size * 2;
+ 
+            // Shader billboarded triangles
+            pb.put(p1.x).put(p1.y).put(p1.z);
+            pb.put(p1.x).put(p1.y).put(p1.z);
+            pb.put(p1.x).put(p1.y).put(p1.z);
+ 
+            int i = blade.index;
+            tb.put(i + 0.25f).put(size);
+            tb.put(i + 0.5f).put(size);
+            tb.put(i + 0f).put(size);
+                           
+            nb.put(normal.x).put(normal.y).put(normal.z);                        
+            nb.put(normal.x).put(normal.y).put(normal.z);                        
+            nb.put(normal.x).put(normal.y).put(normal.z);
+        }        
+ 
+        mesh.setBuffer(Type.Position, 3, pb);
+        mesh.setBuffer(Type.Normal, 3, nb);
+        mesh.setBuffer(Type.TexCoord, 2, tb);
+        
+        //long end = System.nanoTime();
+        //System.out.println( "Sorted " + grassBlades.size() + " grass in:" + ((mid - start)/1000000.0) + " ms" );
+        //System.out.println( "Built grass in:" + ((end - mid)/1000000.0) + " ms" );
     }
     
     public void build() {
 
         Grid grid = getGrid();
         Vector3f size = grid.getCellSize();
-        
-        GrassPlotter plotter = new GrassPlotter();
-        if( getParentZone() != null ) {       
-            // Find the parent relative corner.  This zone could be one of
-            // several splitting up a larger zone.  To interact with the plotter
-            // we need to know what area of the parent we should be scanning.
-            Vector3f worldLoc = grid.toWorld(getXCell(), getYCell(), getZCell(), null);
-            Vector3f parentLoc = getParentZone().getWorldLocation(null);
-            plotter.world = worldLoc;
-            plotter.min = worldLoc.subtract(parentLoc);
-            log.trace("Cell min:" + plotter.min);
-                        
-            plotter.max = plotter.min.add(grid.getCellSize());
-            
-            // Scan the triangles for valid grass plots using the plotter.
-            long start = System.nanoTime();
-            int count = TriangleUtils.processTriangles(getParentZone().getZoneRoot(), plotter);
-            long end = System.nanoTime();
-            if( count > 0 && log.isInfoEnabled() ) {
-                log.info("Plotted grass for " + plotter.processedTriangleCount + " / " + count 
-                            + " triangles in:" + ((end-start)/1000000.0) + " ms");
+ 
+        if( grassBlades == null ) {       
+            GrassPlotter plotter = new GrassPlotter();
+            if( getParentZone() != null ) {       
+                // Find the parent relative corner.  This zone could be one of
+                // several splitting up a larger zone.  To interact with the plotter
+                // we need to know what area of the parent we should be scanning.
+                Vector3f worldLoc = grid.toWorld(getXCell(), getYCell(), getZCell(), null);
+                Vector3f parentLoc = getParentZone().getWorldLocation(null);
+                plotter.world = worldLoc;
+                plotter.min = worldLoc.subtract(parentLoc);
+                log.trace("Cell min:" + plotter.min);
+                            
+                plotter.max = plotter.min.add(grid.getCellSize());
+                
+                // Scan the triangles for valid grass plots using the plotter.
+                long start = System.nanoTime();
+                int count = TriangleUtils.processTriangles(getParentZone().getZoneRoot(), plotter);
+                long end = System.nanoTime();
+                if( count > 0 && log.isInfoEnabled() ) {
+                    log.info("Plotted grass for " + plotter.processedTriangleCount + " / " + count 
+                                + " triangles in:" + ((end-start)/1000000.0) + " ms");
+                }
             }
+            if( !plotter.blades.isEmpty() ) {
+                grassBlades = plotter.blades;                
+                
+                // For statistics, let's keep track of the most number of blades
+                // that we generate
+                synchronized(this) {
+                    int count = grassBlades.size();
+                    if( count > maxBladeCount ) {
+                        maxBladeCount = count;
+                        log.info("New max blade count:" + (count / 2));
+                    }
+                }   
+            }                
         }
  
-        if( !plotter.points.isEmpty() ) {
-            createGrassMesh(plotter.points, plotter.normals, plotter.sizes);       
-            
-            // For statistics, let's keep track of the most number of blades
-            // that we generate
-            synchronized(this) {
-                int count = plotter.points.size();
-                if( count > maxBladeCount ) {
-                    maxBladeCount = count;
-                    log.info("New max blade count:" + (count / 2));
-                }
-            }   
+        if( grassBlades != null ) {
+            createGrassMesh(grassBlades);                          
         }
     }
 
-    private void createGrassMesh( List<Vector3f> points, List<Vector3f> normals, List<Float> sizes ) {
+    private void createGrassMesh( List<Blade> blades ) {
         
-        int triCount = points.size();
+        int triCount = blades.size();
         FloatBuffer pb = BufferUtils.createVector3Buffer(triCount * 3);        
         FloatBuffer nb = BufferUtils.createVector3Buffer(triCount * 3);
         FloatBuffer tb = BufferUtils.createVector2Buffer(triCount * 3);
@@ -142,9 +262,10 @@ public class GrassZone extends AbstractZone {
         int texCoordSize = 2;
  
         for( int i = 0; i < triCount; i++ ) {
-            Vector3f p1 = points.get(i);
-            Vector3f normal = normals.get(i);
-            Float size = sizes.get(i) * 2;
+            Blade blade = blades.get(i);
+            Vector3f p1 = blade.pos;
+            Vector3f normal = blade.dir;
+            Float size = blade.size * 2;
  
             // Shader billboarded triangles
             pb.put(p1.x).put(p1.y).put(p1.z);
@@ -203,6 +324,7 @@ public class GrassZone extends AbstractZone {
         this.grassGeom = builtGeom; 
         if( grassGeom != null ) {
             getZoneRoot().attachChild(grassGeom);
+            updateSort();
         }
     }
 
@@ -225,14 +347,16 @@ public class GrassZone extends AbstractZone {
  
     protected class GrassPlotter implements TriangleProcessor {
 
-        List<Vector3f> points = new ArrayList<Vector3f>();
-        List<Vector3f> normals = new ArrayList<Vector3f>();
-        List<Float> sizes = new ArrayList<Float>();
+        List<Blade> blades = new ArrayList<Blade>();
+        //List<Vector3f> points = new ArrayList<Vector3f>();
+        //List<Vector3f> normals = new ArrayList<Vector3f>();
+        //List<Float> sizes = new ArrayList<Float>();
         float threshold = FastMath.sin(FastMath.QUARTER_PI);
         Vector3f min;
         Vector3f max;
         Vector3f world;
         int processedTriangleCount;
+        int index;
 
         public GrassPlotter() {
         }
@@ -412,9 +536,10 @@ public class GrassZone extends AbstractZone {
                             float offset = Math.min(1, Math.max(0, (offset1 + offset2 + normalOffset)));
  
                             if( offset > 0.1 ) {
-                                sizes.add(offset);
-                                points.add(plot);                                                
-                                normals.add(newNorm);
+                                //sizes.add(offset);
+                                //points.add(plot);                                                
+                                //normals.add(newNorm);
+                                blades.add(new Blade(plot, newNorm, offset, index++));
                             }
                         } 
                     }
@@ -423,6 +548,43 @@ public class GrassZone extends AbstractZone {
         }   
     }
 
+    private class Blade {
+        Vector3f pos;
+        Vector3f dir;
+        float size;
+        int index;
+        
+        public Blade( Vector3f pos, Vector3f dir, float size, int index ) {
+            this.pos = pos;
+            this.dir = dir;
+            this.size = size;
+            this.index = index;
+        }
+        
+        @Override
+        public String toString() {
+            return "Blade[" + pos + "]";
+        }
+    }
+ 
+    private class DistanceComparator implements Comparator<Blade> {
+
+        public int compare( Blade b1, Blade b2 ) {
+            float dx, dz;
+            dx = b1.pos.x - sortOrigin.x;           
+            dz = b1.pos.z - sortOrigin.z;
+            float d1 = dx * dx + dz * dz;           
+            dx = b2.pos.x - sortOrigin.x;           
+            dz = b2.pos.z - sortOrigin.z;
+            float d2 = dx * dx + dz * dz;
+            if( d1 < d2 ) 
+                return 1;
+            if( d2 < d1 ) 
+                return -1;
+            return 0;            
+        }
+        
+    }
     
     public static class Factory implements ZoneFactory {
         private Material material;

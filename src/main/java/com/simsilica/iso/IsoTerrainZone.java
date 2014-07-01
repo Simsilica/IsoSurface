@@ -110,6 +110,10 @@ public class IsoTerrainZone implements Zone {
         return false;
     }
  
+    public boolean setViewLocation( float x, float z ) {
+        return false;
+    }
+
     public Grid getGrid() {
         return grid;
     }
