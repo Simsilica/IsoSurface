@@ -139,20 +139,20 @@ public class ArrayDensityVolume implements DensityVolume {
         double c110 = array[index(xTop, yTop, zBase)];
         double c111 = array[index(xTop, yTop, zTop)];
         double c011 = array[index(xBase, yTop, zTop)]; 
-        
-        double xPart = x - xBase;   
-        double c00 = c000 + (c100 - c000) * xPart;
-        double c01 = c001 + (c101 - c001) * xPart;
-        
-        double c10 = c010 + (c110 - c010) * xPart;
-        double c11 = c011 + (c111 - c011) * xPart;
  
+        double xPart = x - xBase;   
+        double cx00 = c000 + (c100 - c000) * xPart;
+        double cx01 = c001 + (c101 - c001) * xPart;
+        
+        double cx10 = c010 + (c110 - c010) * xPart;
+        double cx11 = c011 + (c111 - c011) * xPart;
+
         double yPart = y - yBase;
-        double c0 = c00 + (c10 - c00) * yPart;              
-        double c1 = c11 + (c11 - c01) * yPart;              
+        double cxy0 = cx00 + (cx10 - cx00) * yPart;              
+        double cxy1 = cx01 + (cx11 - cx01) * yPart;              
  
         double zPart = z - zBase;
-        double c = c0 + (c1 - c0) * zPart;
+        double c = cxy0 + (cxy1 - cxy0) * zPart;
  
         return c;              
     } 
