@@ -65,8 +65,8 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- *  A zone implementation that tests plotting various 
- *  frequencies and strengths.
+ *  A zone implementation that plots various trees
+ *  as LOD'ed batches.
  *
  *  @author    Paul Speed
  */
