@@ -184,9 +184,8 @@ public class BatchTemplate {
         }       
  
         Vector3f point = new Vector3f();
+        Vector3f localOffset = new Vector3f();
  
-        // We're making a line mesh... so just render 
-        // the point and a point + normal
         int lastIndex = 0;
         for( BatchInstance instance : instances ) { 
             Vector3f p1 = instance.position;
@@ -209,9 +208,13 @@ public class BatchTemplate {
                 point.set(tPos.get(), tPos.get(), tPos.get());
                 rot.mult(point, point);
  
-                pb.put((point.x * scale) + p1.x + offset.x); 
-                pb.put((point.y * scale) + p1.y + offset.y); 
-                pb.put((point.z * scale) + p1.z + offset.z);
+                localOffset.set(offset);
+                localOffset.multLocal(scale);
+                rot.mult(localOffset, localOffset); 
+ 
+                pb.put((point.x * scale) + p1.x + localOffset.x); 
+                pb.put((point.y * scale) + p1.y + localOffset.y); 
+                pb.put((point.z * scale) + p1.z + localOffset.z);
              
                 if( nb != null ) {
                     point.set(tNorm.get(), tNorm.get(), tNorm.get());
@@ -281,7 +284,7 @@ public class BatchTemplate {
         result.setQueueBucket(sourceGeom.getQueueBucket());        
         return result;                                          
     }
- 
+
     // This method is more elegant and will handle any mesh...
     // but it's also many many times slower.   
     public Geometry createBatch2( List<Vector3f> positions, List<Vector3f> upVectors,
