@@ -94,7 +94,7 @@ public class MarchingCubesMeshGenerator implements MeshGenerator {
         this.cy = cy;
         this.cz = cz;
         this.masks = new int[cx * cy * cz];
-        this.cells = new int[cy * cy * cz];
+        this.cells = new int[cx * cy * cz];
         this.edgeVerts = new int[cx+1][cy+1][cz+1][3];
         this.xzScale = xzScale;               
     }
