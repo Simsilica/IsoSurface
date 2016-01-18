@@ -305,10 +305,17 @@ public class InstancedTreeZone extends AbstractZone {
             return;
         }
         for( VertexBuffer vb : mesh.getBufferList() ) {
-            if( log.isTraceEnabled() ) {
-                log.trace("--destroying buffer:" + vb);
+            // Only release the per-instance data
+            if( vb.isInstanced() ) {
+                if( log.isTraceEnabled() ) {
+                    log.trace("--destroying buffer:" + vb);
+                }
+                BufferUtils.destroyDirectBuffer( vb.getData() );
+            } else {
+                if( log.isTraceEnabled() ) {
+                    log.trace("--skipping non-instanced buffer:" + vb);
+                }
             }
-            BufferUtils.destroyDirectBuffer( vb.getData() );
         }
     }
  
@@ -377,6 +384,7 @@ public class InstancedTreeZone extends AbstractZone {
                 }
  
                 if( geom != null ) {               
+//System.out.println( "InstancedTreeZone.getInstancedLevel() Setting shadow mode on:" + geom );                                               
                     geom.setShadowMode(ShadowMode.CastAndReceive);
                 }
                 parts[i] = geom;
@@ -425,6 +433,7 @@ public class InstancedTreeZone extends AbstractZone {
                     Geometry geom = bt.createInstances(instances);
                     if( geom != null ) {
                         results.add(geom);
+//System.out.println( "InstancedTreeZone.addBatch() Setting shadow mode on:" + geom );                                               
                         geom.setShadowMode(ShadowMode.CastAndReceive);
                     }
                 }
