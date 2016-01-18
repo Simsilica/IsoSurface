@@ -51,4 +51,13 @@ public class BatchInstance {
     public Vector3f position;
     public Quaternion rotation;
     public float scale;
+    
+    public BatchInstance() {
+    }
+    
+    public BatchInstance( Vector3f pos, Quaternion rot, float scale ) {
+        this.position = pos;
+        this.rotation = rot;
+        this.scale = scale;
+    }
 }
