@@ -48,11 +48,17 @@ import com.simsilica.iso.DensityVolume;
  */
 public class ResamplingVolume implements DensityVolume {
  
+    private Vector3f offset;
     private Vector3f scale;
     private DensityVolume delegate;
     
     public ResamplingVolume( Vector3f scale, DensityVolume delegate ) {
+        this(scale, Vector3f.ZERO, delegate);
+    }
+
+    public ResamplingVolume( Vector3f scale, Vector3f preScaleOffset, DensityVolume delegate ) {
         this.scale = scale.clone();
+        this.offset = preScaleOffset.clone();
         this.delegate = delegate;
     }
  
@@ -64,14 +70,25 @@ public class ResamplingVolume implements DensityVolume {
         x *= scale.x;
         y *= scale.y;
         z *= scale.z;
+        x += offset.x;
+        y += offset.y;
+        z += offset.z;        
         return delegate.getDensity(x, y, z);
     }
     
     public Vector3f getFieldDirection( float x, float y, float z, Vector3f target ) {
-        x *= scale.x;
-        y *= scale.y;
-        z *= scale.z;
-        Vector3f dir = delegate.getFieldDirection(x, y, z, target);
+        float xt = x * scale.x;
+        float yt = y * scale.y;
+        float zt = z * scale.z;
+        xt += offset.x;
+        yt += offset.y;
+        zt += offset.z;
+        Vector3f dir = delegate.getFieldDirection(xt, yt, zt, target);
         return dir;
+    }
+ 
+    @Override   
+    public String toString() {
+        return "ResamplingVolume[" + scale + ", " + offset + ", " + delegate + "]";
     }
 }
