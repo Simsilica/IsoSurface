@@ -163,7 +163,7 @@ public class ArrayDensityVolume implements DensityVolume {
     }
     
     public Vector3f getFieldDirection( float x, float y, float z, Vector3f target ) {
-    
+ 
         float d = 1f; 
 
         double nx = trilinear(x + d, y, z)
@@ -172,14 +172,14 @@ public class ArrayDensityVolume implements DensityVolume {
                     - trilinear(x, y - d, z);
         double nz = trilinear(x, y, z + d)
                     - trilinear(x, y, z - d);
- 
+    
         if( target == null ) {
             target = new Vector3f((float)-nx, (float)-ny, (float)-nz).normalizeLocal();
         } else {
             target.set((float)-nx, (float)-ny, (float)-nz);
             target.normalizeLocal();
         }
-    
+        
         return target;
     }
 }
