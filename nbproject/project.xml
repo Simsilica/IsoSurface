@@ -9,6 +9,7 @@
         </buildExtensions>
         <data xmlns="http://www.netbeans.org/ns/j2se-project/3">
             <name>IsoSurface</name>
+            <explicit-platform explicit-source-supported="true"/>
             <source-roots>
                 <root id="src.java.dir"/>
             </source-roots>
