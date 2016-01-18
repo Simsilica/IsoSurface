@@ -69,12 +69,32 @@ public class SimpleVolumeCollider implements Collider {
         
         // Else try to calculate the intersection
         float center = volume.getDensity(1 + loc.x, 1 + loc.y, 1 + loc.z);
-        float part = Math.abs(density) / Math.abs(density - center);
-        float pen = radius * part;
-        //System.out.println( "density:" + density + "  center:" + center + "  part:" + part + "  pen:" + pen ); 
+        
+        float pen;
+        Vector3f cp;
+        
+        if( center > 0 ) {
+            // we are deep in it... try to see if we can guess a way 
+            //  out
+            float outside = volume.getDensity(1 + loc.x + dir.x, 
+                                              1 + loc.y + dir.y,
+                                              1 + loc.z + dir.z);
+            float part = Math.abs(center) / Math.abs(center - outside);
+            pen = part;
+            //System.out.println( "outside:" + outside + "  center:" + center + "  part:" + part + "  pen:" + pen );
+             
+            // Calculate a contact point
+            cp = loc.add(dir.mult(radius - pen));
+            //System.out.println( "loc:" + loc + " cp:" + cp );
+        } else {        
+            float part = Math.abs(density) / Math.abs(density - center);
+            pen = radius * part;
+            //System.out.println( "density:" + density + "  center:" + center + "  part:" + part + "  pen:" + pen ); 
  
-        // Calculate a contact point
-        Vector3f cp = loc.add(dir.mult(radius - pen));
+            // Calculate a contact point
+            cp = loc.add(dir.mult(radius - pen));
+            //System.out.println( "loc:" + loc + " cp:" + cp );
+        }
  
         Contact result = new Contact();
         result.contactPoint = cp;
