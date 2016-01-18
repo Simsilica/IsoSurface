@@ -94,8 +94,8 @@ public class InstanceTemplate {
  
             // The offset needs to be projected
             Vector3f localOffset = rot.mult(offset);
-            localOffset.multLocal(scale); 
-            
+            localOffset.multLocal(scale);
+ 
             p1 = p1.add(localOffset);
             
             min.minLocal(p1);
