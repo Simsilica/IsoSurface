@@ -38,6 +38,7 @@ package com.simsilica.iso.util;
 
 
 import com.jme3.texture.Image;
+import com.jme3.texture.Image.Format;
 import com.jme3.texture.Texture;
 import java.nio.ByteBuffer;
 import org.slf4j.Logger;
@@ -76,7 +77,8 @@ public class BilinearArray {
         ByteBuffer data = image.getData(0);
         data.rewind();
     
-        System.out.println( "Format:" + image.getFormat() + " bpp:" + image.getFormat().getBitsPerPixel() );
+        //System.out.println( "Format:" + image.getFormat() + " bpp:" + image.getFormat().getBitsPerPixel() );
+        Format format = image.getFormat();
         int span = image.getFormat().getBitsPerPixel() / 8;
         int size = result.array.length;
                
@@ -99,10 +101,28 @@ public class BilinearArray {
                     data.get();
                 }
             }
-            int value = (b1 & 0xff) << 24;
-            value |= (b2 & 0xff) << 16; 
-            value |= (b3 & 0xff) << 8; 
-            value |= (b4 & 0xff);
+ 
+            int value = 0;
+            switch( format ) {
+                case BGR8:
+                    value |= (b3 & 0xff) << 24;
+                    value |= (b2 & 0xff) << 16; 
+                    value |= (b1 & 0xff) << 8; 
+                    break;
+                case ABGR8:
+                    value |= (b4 & 0xff) << 24;
+                    value |= (b3 & 0xff) << 16; 
+                    value |= (b2 & 0xff) << 8; 
+                    value |= (b1 & 0xff);
+                    break;
+                default :                
+                    // Default to rgb or rgba          
+                    value |= (b1 & 0xff) << 24;
+                    value |= (b2 & 0xff) << 16; 
+                    value |= (b3 & 0xff) << 8; 
+                    value |= (b4 & 0xff);
+                    break;
+            }                    
             result.array[i] = value; 
         }
                
