@@ -182,7 +182,8 @@ void main(){
     // We want full alpha from 0 to mid and fading alpha from
     // mid falloff
     float mid = m_DistanceFalloff * 0.75;
-    float fade = min(1.0, (m_DistanceFalloff - vDistance) / mid);
+    float fade = clamp((m_DistanceFalloff - vDistance) / mid, 0.0, 1.0);
+    //float fade = min(1.0, (m_DistanceFalloff - vDistance) / mid);
     fade = fade * fade; // more gradual fading
 
     #ifdef USE_DISCARD 
